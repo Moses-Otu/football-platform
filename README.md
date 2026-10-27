@@ -1,36 +1,76 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Football Platform
 
-## Getting Started
+Daily football puzzles, player discovery and friend challenges. Built with Next.js, TypeScript, Tailwind CSS, shadcn/ui and Supabase, deployed on Vercel. Football data comes from a provider layer with two adapters: football-data.org (the default) and API-Football.
 
-First, run the development server:
+This is the free-tier setup: football-data.org free plan, Supabase Free and Vercel Hobby. It syncs one league (Premier League) by default.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+## How data flows
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Users never call a football API. A daily cron job (`/api/cron/sync`) fetches leagues, teams, fixtures and players, stores raw responses in `football.api_cache`, and writes clean rows into the `football` schema. Pages read Postgres only.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- `src/lib/providers/types.ts`: provider-neutral types and the `FootballProvider` interface
+- `src/lib/providers/football-data/`: the football-data.org client and adapter
+- `src/lib/providers/api-football/`: the API-Football client and adapter
+- `src/lib/providers/index.ts`: picks the adapter from `FOOTBALL_PROVIDER`
+- `src/lib/sync/`: cache, quota guard, database writes and the sync run
+- `supabase/migrations/`: database schema and row-level security
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Providers
 
-## Learn More
+| | football-data.org (free) | API-Football (free) |
+| --- | --- | --- |
+| Limit | 10 requests a minute | 100 requests a day |
+| Leagues | 12 competitions | All, with season limits |
+| Fixtures, results, tables | Yes (scores delayed) | Yes |
+| Squads (players, birth date, nationality, position) | Listed as paid-only; the adapter uses them if returned | Yes |
+| Player season stats | No | Yes |
 
-To learn more about Next.js, take a look at the following resources:
+A football-data.org sync needs 3 requests per league and spaces them 6.5 seconds apart to stay under the per-minute limit. If your plan returns no squads, the sync stores teams and fixtures only, and the player count on the home page stays at 0.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Setup
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+You need accounts on [football-data.org](https://www.football-data.org/client/register), [Supabase](https://supabase.com) and [Vercel](https://vercel.com).
 
-## Deploy on Vercel
+1. Install dependencies:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+   ```bash
+   npm install
+   ```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+2. Copy `.env.example` to `.env.local` and fill in the values.
+
+3. Create the database. In a new Supabase project, link and push the migrations:
+
+   ```bash
+   npx supabase init
+   npx supabase link --project-ref <your-project-ref>
+   npx supabase db push
+   ```
+
+4. In Supabase, go to Project Settings > Data API and add `football` to **Exposed schemas**. Without this, the app cannot read football data.
+
+5. Run the app:
+
+   ```bash
+   npm run dev
+   ```
+
+6. Run one sync by hand (replace the secret with your `CRON_SECRET`):
+
+   ```bash
+   curl -H "Authorization: Bearer <CRON_SECRET>" http://localhost:3000/api/cron/sync
+   ```
+
+   The response shows requests used and how many teams, fixtures and players were stored.
+
+## Deploy
+
+Import the repo in Vercel and add the same environment variables. `vercel.json` schedules the sync daily at 04:00 UTC; Hobby allows one cron run a day.
+
+Before a public launch, move to paid tiers: Vercel Hobby is for non-commercial use only, and Supabase Free pauses a project after a week without activity.
+
+## Rules
+
+- Never invent player facts, fixtures, results or stats. Missing provider values stay null and show as "not available".
+- API keys stay server-side. Only `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` reach the browser.
+- No scraping of publishers without permission.

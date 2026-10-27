@@ -1,69 +1,102 @@
-import Image from "next/image";
+import { connection } from "next/server";
+import { Suspense } from "react";
+
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { createAdminClient } from "@/lib/supabase/admin";
+
+const FEATURES = [
+  { title: "Footle", body: "Guess the mystery player from clues. A new one every day." },
+  { title: "Players", body: "Browse profiles, nationality, position and career history." },
+  { title: "Compare", body: "Put two players side by side on the stats both have." },
+  { title: "Guess the Score", body: "Predict results before kick-off and climb the table." },
+];
+
+async function getDataStatus() {
+  try {
+    const football = createAdminClient().schema("football");
+    const [players, fixtures, lastRun] = await Promise.all([
+      football.from("players").select("id", { count: "exact", head: true }),
+      football.from("fixtures").select("id", { count: "exact", head: true }),
+      football
+        .from("sync_runs")
+        .select("started_at, status, requests_used")
+        .order("started_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
+    return {
+      ok: true as const,
+      players: players.count ?? 0,
+      fixtures: fixtures.count ?? 0,
+      lastRun: lastRun.data,
+    };
+  } catch (e) {
+    return { ok: false as const, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+async function DataStatus() {
+  await connection();
+  const status = await getDataStatus();
+
+  return status.ok ? (
+    <dl className="grid grid-cols-2 gap-x-6 gap-y-2 tabular-nums">
+      <dt className="text-muted-foreground">Players (all seasons)</dt>
+      <dd>{status.players}</dd>
+      <dt className="text-muted-foreground">Fixtures</dt>
+      <dd>{status.fixtures}</dd>
+      <dt className="text-muted-foreground">Last sync</dt>
+      <dd>
+        {status.lastRun
+          ? `${new Date(status.lastRun.started_at).toUTCString()} (${status.lastRun.status})`
+          : "Never run"}
+      </dd>
+      <dt className="text-muted-foreground">API requests used</dt>
+      <dd>{status.lastRun?.requests_used ?? "None yet"}</dd>
+    </dl>
+  ) : (
+    <p className="text-muted-foreground">
+      Not connected to the database yet: {status.error}. Fill in <code>.env.local</code> as the README describes.
+    </p>
+  );
+}
 
 export default function Home() {
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+    <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-10 px-4 py-12 sm:px-6">
+      <header className="flex flex-col gap-3">
+        <Badge variant="secondary" className="w-fit">
+          In development
+        </Badge>
+        <h1 className="text-4xl font-semibold tracking-tight text-balance">Footle</h1>
+        <p className="max-w-prose text-lg text-muted-foreground">
+          Daily football puzzles, player discovery and friendly competition, built on verified data.
+        </p>
+      </header>
+
+      <section className="grid gap-4 sm:grid-cols-2">
+        {FEATURES.map((f) => (
+          <Card key={f.title}>
+            <CardHeader>
+              <CardTitle>{f.title}</CardTitle>
+              <CardDescription>{f.body}</CardDescription>
+            </CardHeader>
+          </Card>
+        ))}
+      </section>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Data status</CardTitle>
+          <CardDescription>What the last sync stored.</CardDescription>
+        </CardHeader>
+        <CardContent className="text-sm">
+          <Suspense fallback={<p className="text-muted-foreground">Loading…</p>}>
+            <DataStatus />
+          </Suspense>
+        </CardContent>
+      </Card>
+    </main>
   );
 }
