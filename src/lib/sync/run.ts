@@ -45,7 +45,7 @@ export async function runSync(config: SyncConfig) {
   const { data: run, error } = await runs.insert({ job: `sync:${config.provider}` }).select("id").single();
   if (error) throw error;
 
-  const summary = { teams: 0, fixtures: 0, players: 0, pagesDone: 0, pagesTotal: 0 };
+  const summary = { teams: 0, fixtures: 0, players: 0, scorers: 0, pagesDone: 0, pagesTotal: 0 };
   let status: "ok" | "stopped_quota" | "error" = "ok";
   let message: string | null = null;
 
@@ -89,6 +89,12 @@ export async function runSync(config: SyncConfig) {
         page++;
       } while (page <= totalPages);
       summary.pagesTotal += totalPages;
+
+      // After the squads, so scorer stats land on rows that already exist.
+      if (provider.getTopScorers) {
+        const scorers = await provider.getTopScorers(leagueId, config.season);
+        summary.scorers += await store.saveScorerStats(scorers, seasonId);
+      }
     }
   } catch (e) {
     if (e instanceof QuotaExceededError) {

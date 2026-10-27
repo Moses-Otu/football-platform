@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { connection } from "next/server";
 import { Suspense } from "react";
 
@@ -5,8 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-const FEATURES = [
-  { title: "Footle", body: "Guess the mystery player from clues. A new one every day." },
+const FEATURES: { title: string; body: string; href?: string }[] = [
+  { title: "Footle", body: "Guess the mystery player from clues. A new one every day.", href: "/footle" },
   { title: "Players", body: "Browse profiles, nationality, position and career history." },
   { title: "Compare", body: "Put two players side by side on the stats both have." },
   { title: "Guess the Score", body: "Predict results before kick-off and climb the table." },
@@ -76,14 +77,23 @@ export default function Home() {
       </header>
 
       <section className="grid gap-4 sm:grid-cols-2">
-        {FEATURES.map((f) => (
-          <Card key={f.title}>
-            <CardHeader>
-              <CardTitle>{f.title}</CardTitle>
-              <CardDescription>{f.body}</CardDescription>
-            </CardHeader>
-          </Card>
-        ))}
+        {FEATURES.map((f) => {
+          const card = (
+            <Card className={f.href ? "h-full transition-colors hover:border-foreground/30" : "h-full opacity-70"}>
+              <CardHeader>
+                <CardTitle>{f.href ? `${f.title} →` : f.title}</CardTitle>
+                <CardDescription>{f.href ? f.body : `${f.body} Coming soon.`}</CardDescription>
+              </CardHeader>
+            </Card>
+          );
+          return f.href ? (
+            <Link key={f.title} href={f.href} className="rounded-xl focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">
+              {card}
+            </Link>
+          ) : (
+            <div key={f.title}>{card}</div>
+          );
+        })}
       </section>
 
       <Card>

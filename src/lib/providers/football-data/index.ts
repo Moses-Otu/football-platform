@@ -8,6 +8,7 @@ import type {
   League,
   Page,
   PlayerWithSeasons,
+  ScorerStats,
   Team,
 } from "@/lib/providers/types";
 
@@ -15,6 +16,7 @@ import type {
   RawCompetition,
   RawMatch,
   RawMatchesResponse,
+  RawScorersResponse,
   RawSeason,
   RawTeam,
   RawTeamRef,
@@ -26,6 +28,7 @@ const TTL = {
   competitions: 30 * DAY,
   teams: 7 * DAY,
   matches: 60 * 60,
+  scorers: 12 * 60 * 60,
 };
 
 const STATUS: Record<string, FixtureStatus> = {
@@ -139,6 +142,21 @@ export class FootballDataProvider implements FootballProvider {
       }
     }
     return { items, page: 1, totalPages: 1 };
+  }
+
+  async getTopScorers(leagueId: string, season: number): Promise<ScorerStats[]> {
+    const body = await this.get<RawScorersResponse>(
+      `/competitions/${leagueId}/scorers`,
+      { season, limit: 100 },
+      TTL.scorers,
+    );
+    return body.scorers.map((s) => ({
+      playerExternalId: String(s.player.id),
+      teamExternalId: String(s.team.id),
+      goals: s.goals,
+      assists: s.assists,
+      appearances: s.playedMatches,
+    }));
   }
 
   async getFixtures(leagueId: string, _season: number, from: string, to: string): Promise<Fixture[]> {

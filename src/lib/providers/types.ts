@@ -63,6 +63,15 @@ export interface Fixture {
   awayGoals: number | null;
 }
 
+/** A player's goal stats in one league season, from a top-scorers list. */
+export interface ScorerStats {
+  playerExternalId: ExternalId;
+  teamExternalId: ExternalId;
+  goals: number | null;
+  assists: number | null;
+  appearances: number | null;
+}
+
 export interface Page<T> {
   items: T[];
   page: number;
@@ -76,4 +85,6 @@ export interface FootballProvider {
   /** Players in a league season, page by page (page 1 first). May be empty if the plan has no player data. */
   getPlayers(leagueId: ExternalId, season: number, page: number): Promise<Page<PlayerWithSeasons>>;
   getFixtures(leagueId: ExternalId, season: number, from: string, to: string): Promise<Fixture[]>;
+  /** Optional: providers whose player list has no stats can supply a top-scorers list. */
+  getTopScorers?(leagueId: ExternalId, season: number): Promise<ScorerStats[]>;
 }

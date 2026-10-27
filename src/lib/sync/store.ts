@@ -2,7 +2,7 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import type { Fixture, League, PlayerWithSeasons, ProviderId, Team } from "@/lib/providers/types";
+import type { Fixture, League, PlayerWithSeasons, ProviderId, ScorerStats, Team } from "@/lib/providers/types";
 
 type EntityType = "league" | "season" | "team" | "player" | "fixture";
 
@@ -72,6 +72,22 @@ export class FootballStore {
     return id;
   }
 
+  /** Our ids for many provider ids of one type; unknown ones are left out. */
+  private async lookupIds(type: EntityType, externalIds: string[]): Promise<Map<string, string>> {
+    const ids = new Map<string, string>();
+    for (const part of chunk(externalIds, LOOKUP_CHUNK)) {
+      const { data, error } = await this.db
+        .from("external_ids")
+        .select("external_id, entity_id")
+        .eq("provider_id", this.provider)
+        .eq("entity_type", type)
+        .in("external_id", part);
+      if (error) throw error;
+      for (const r of data) ids.set(r.external_id, r.entity_id);
+    }
+    return ids;
+  }
+
   /**
    * Bulk version of save for many rows of one type: a handful of queries in
    * total instead of several per row. New rows get ids generated here, so
@@ -82,18 +98,10 @@ export class FootballStore {
     table: string,
     items: { externalId: string; row: Record<string, unknown> }[],
   ): Promise<Map<string, string>> {
-    const ids = new Map<string, string>();
-
-    for (const part of chunk(items.map((i) => i.externalId), LOOKUP_CHUNK)) {
-      const { data, error } = await this.db
-        .from("external_ids")
-        .select("external_id, entity_id")
-        .eq("provider_id", this.provider)
-        .eq("entity_type", type)
-        .in("external_id", part);
-      if (error) throw error;
-      for (const r of data) ids.set(r.external_id, r.entity_id);
-    }
+    const ids = await this.lookupIds(
+      type,
+      items.map((i) => i.externalId),
+    );
 
     const fresh: string[] = [];
     for (const { externalId } of items) {
@@ -227,6 +235,45 @@ export class FootballStore {
       const { error } = await this.db.from("player_seasons").upsert(part);
       if (error) throw error;
     }
+  }
+
+  /**
+   * Adds goals, assists and appearances from a top-scorers list to the
+   * season rows of players we already have. Players not in a synced squad
+   * are skipped; we never create a player from a scorers entry alone.
+   */
+  async saveScorerStats(stats: ScorerStats[], seasonId: string): Promise<number> {
+    const players = await this.lookupIds(
+      "player",
+      stats.map((s) => s.playerExternalId),
+    );
+    const teams = await this.lookupIds(
+      "team",
+      stats.map((s) => s.teamExternalId),
+    );
+
+    const rows = stats.flatMap((s) => {
+      const playerId = players.get(s.playerExternalId);
+      const teamId = teams.get(s.teamExternalId);
+      if (!playerId || !teamId) return [];
+      // Only these columns are sent, so the upsert leaves the others alone.
+      return [
+        {
+          player_id: playerId,
+          season_id: seasonId,
+          team_id: teamId,
+          goals: s.goals,
+          assists: s.assists,
+          appearances: s.appearances,
+        },
+      ];
+    });
+
+    for (const part of chunk(rows, WRITE_CHUNK)) {
+      const { error } = await this.db.from("player_seasons").upsert(part);
+      if (error) throw error;
+    }
+    return rows.length;
   }
 
   /** Saves fixtures in a few batched queries. */

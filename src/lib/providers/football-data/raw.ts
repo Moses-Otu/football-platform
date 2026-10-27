@@ -59,6 +59,18 @@ export interface RawMatch {
   score: { fullTime: { home: number | null; away: number | null } };
 }
 
+export interface RawScorer {
+  player: { id: number };
+  team: { id: number };
+  goals: number | null;
+  assists: number | null;
+  playedMatches: number | null;
+}
+
+export interface RawScorersResponse {
+  scorers: RawScorer[];
+}
+
 export interface RawMatchesResponse {
   matches: RawMatch[];
 }
